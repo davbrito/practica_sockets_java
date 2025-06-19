@@ -1,7 +1,9 @@
-package com.telecomsockets.views;
+package com.telecomsockets.components;
 
 import java.util.UUID;
+
 import com.telecomsockets.models.ChatMessageModel;
+
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
@@ -18,7 +20,6 @@ public class MessageList extends ListView<ChatMessageModel> {
         setPlaceholder(new Label("No hay mensajes disponibles"));
     }
 
-
     private final class MessageCell extends ListCell<ChatMessageModel> {
         private HBox container;
         private VBox box;
@@ -26,7 +27,6 @@ public class MessageList extends ListView<ChatMessageModel> {
         private Label senderLabel;
         private Label messageLabel;
         private final UUID myId;
-
 
         public MessageCell(UUID myId) {
             this.myId = myId;
@@ -42,7 +42,6 @@ public class MessageList extends ListView<ChatMessageModel> {
 
             container = new HBox(box);
             container.setPadding(new Insets(4));
-
 
         }
 

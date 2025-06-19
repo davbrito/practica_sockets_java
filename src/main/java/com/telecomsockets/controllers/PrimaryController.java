@@ -1,13 +1,13 @@
-package com.telecomsockets.primary;
+package com.telecomsockets.controllers;
 
 import com.telecomsockets.Navigation;
 import com.telecomsockets.contracts.Controller;
+import com.telecomsockets.views.PrimaryView;
 import javafx.scene.layout.Region;
 
 public class PrimaryController extends Controller {
-    @Override
-    public String getTitle() {
-        return "Telecom Sockets";
+    {
+        setTitle("Telecom Sockets");
     }
 
     public void clientMode() {

@@ -1,4 +1,4 @@
-package com.telecomsockets.server;
+package com.telecomsockets.sockets;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -15,6 +15,7 @@ import com.telecomsockets.models.ChatMessageRequest;
 import com.telecomsockets.models.ChatUser;
 import com.telecomsockets.services.MessageBrokerService;
 import javafx.application.Platform;
+import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyStringProperty;
 import javafx.beans.property.SimpleObjectProperty;
@@ -37,7 +38,7 @@ public class SocketServer {
     private final UUID serverId = UUID.randomUUID();
     private ObservableMap<UUID, ClientHandler> clientHandlers = FXCollections.observableHashMap();
 
-    SocketServer() {
+    public SocketServer() {
         clientHandlers.addListener((MapChangeListener<UUID, ClientHandler>) (change) -> {
             change.getMap().values().forEach(item -> {
                 item.sendServerUsers();
@@ -59,7 +60,7 @@ public class SocketServer {
         return serverName;
     }
 
-    ChatUser toChatUser() {
+    public ChatUser toChatUser() {
         return new ChatUser(serverId, String.format("%s (servidor)", serverName.get()));
     }
 
@@ -76,6 +77,7 @@ public class SocketServer {
         return null;
     }
 
+    private Thread backgroundThread;
 
     public void start(String name, String ip, int port) {
         serverName.set(name);
@@ -86,7 +88,11 @@ public class SocketServer {
             return;
         }
 
-        new Thread(new Task<Void>() {
+        if (backgroundThread != null && backgroundThread.isAlive()) {
+            backgroundThread.interrupt();
+        }
+
+        backgroundThread = new Thread(new Task<Void>() {
             @Override
             protected void scheduled() {
                 setServerState(ServerState.LISTENING);
@@ -118,7 +124,6 @@ public class SocketServer {
                     return;
                 }
 
-
                 error.printStackTrace();
                 setServerState(ServerState.STOPPED);
 
@@ -130,9 +135,8 @@ public class SocketServer {
             protected void cancelled() {
                 setServerState(ServerState.STOPPED);
             }
-        }).start();
-
-
+        }, "SocketServer-BackgroundThread");
+        backgroundThread.start();
     }
 
     private void listenImpl(String ip, int port) throws IOException {
@@ -156,9 +160,7 @@ public class SocketServer {
         setServerState(ServerState.STOPPED);
     }
 
-
     public void close() throws Exception {
-
 
         this.clientHandlers.values().stream().toList().forEach(ClientHandler::close);
         this.clientHandlers.clear();
@@ -172,8 +174,14 @@ public class SocketServer {
         } else {
             System.out.println("El servidor ya está detenido.");
         }
-
         serverSocket = null;
+
+        if (backgroundThread != null && backgroundThread.isAlive()) {
+            backgroundThread.interrupt();
+            backgroundThread.join();
+            backgroundThread = null;
+        }
+
     }
 
     private void setServerState(ServerState state) {
@@ -192,23 +200,32 @@ public class SocketServer {
         return serverState.get() == ServerState.STOPPED;
     }
 
-    public boolean getIsConnected() {
-        return serverState.get() == ServerState.CONNECTED;
+    public BooleanBinding is(ServerState state) {
+        return serverStateProperty().isEqualTo(state);
     }
 
-    public boolean getIsListening() {
-        return serverState.get() == ServerState.LISTENING;
+    public UUID getServerId() {
+        return serverId;
     }
 
+    private Consumer<ChatMessageModel> onMessageReceived;
 
-    class ClientHandler {
+    public void setOnMessageReceived(Consumer<ChatMessageModel> onMessageReceived) {
+        this.onMessageReceived = onMessageReceived;
+    }
+
+    private void notifyMessageReceived(ChatMessageModel message) {
+        if (onMessageReceived != null) {
+            onMessageReceived.accept(message);
+        }
+    }
+
+    public class ClientHandler {
 
         private Socket clientSocket;
         private UUID clientId;
         private StringProperty clientName = new SimpleStringProperty(this, "clientName", "<Sin nombre>");
         private MessageBrokerService messageBrokerService;
-
-
 
         public ClientHandler(Socket clientSocket) {
             this.clientSocket = clientSocket;
@@ -217,8 +234,6 @@ public class SocketServer {
         public ReadOnlyStringProperty clientNameProperty() {
             return clientName;
         }
-
-
 
         public UUID getClientId() {
             return clientId;
@@ -257,7 +272,6 @@ public class SocketServer {
 
                     MainApp.errorAlert(error);
 
-
                 }
 
                 @Override
@@ -267,14 +281,13 @@ public class SocketServer {
                 }
             };
 
-            new Thread(task).start();
+            new Thread(task, "ClientHandler-" + getClientName()).start();
         }
 
         private void run() throws IOException, ClassNotFoundException {
             messageBrokerService = new MessageBrokerService(clientSocket);
 
             System.out.println("Cliente conectado: " + getClientAddress());
-
 
             messageBrokerService.receiver.setOnMessageReceived(SocketServer.this::notifyMessageReceived);
             messageBrokerService.receiver.setOnHandshake(handshake -> {
@@ -321,7 +334,6 @@ public class SocketServer {
                 }
             }
 
-
             var client = SocketServer.this.getClientHandler(receiver.id());
 
             if (client == null) {
@@ -336,7 +348,6 @@ public class SocketServer {
             var sender = SocketServer.this.getChatUser(senderId);
             var receiver = SocketServer.this.getChatUser(receiverId);
 
-
             if (sender == null || receiver == null) {
                 MainApp.errorAlert("El remitente o el receptor no están conectados: " + senderId + " -> " + receiverId);
                 return;
@@ -350,7 +361,6 @@ public class SocketServer {
 
             if (clientSocket == null)
                 return;
-
 
             try {
                 if (!clientSocket.isClosed()) {
@@ -370,33 +380,9 @@ public class SocketServer {
 
         }
 
-        ChatUser toChatUser() {
+        public ChatUser toChatUser() {
             return new ChatUser(clientId, clientName.get());
         }
     }
 
-    public String getServerName() {
-        return serverName.get();
-    }
-
-    public UUID getServerId() {
-        return serverId;
-    }
-
-    private Consumer<ChatMessageModel> onMessageReceived;
-
-    public void setOnMessageReceived(Consumer<ChatMessageModel> onMessageReceived) {
-        this.onMessageReceived = onMessageReceived;
-    }
-
-    private void notifyMessageReceived(ChatMessageModel message) {
-        if (onMessageReceived != null) {
-            onMessageReceived.accept(message);
-        }
-    }
-
-
-
 }
-
-

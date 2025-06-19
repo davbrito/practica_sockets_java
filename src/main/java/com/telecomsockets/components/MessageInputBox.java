@@ -1,4 +1,4 @@
-package com.telecomsockets.views;
+package com.telecomsockets.components;
 
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
@@ -10,8 +10,7 @@ import javafx.scene.layout.Priority;
 
 public class MessageInputBox extends HBox {
     private TextField textField;
-    private ObjectProperty<SendHandler> onSendMessage =
-            new SimpleObjectProperty<>(this, "onSendMessage", null);
+    private ObjectProperty<SendHandler> onSendMessage = new SimpleObjectProperty<>(this, "onSendMessage", null);
     {
         textField = new TextField();
         textField.setPromptText("Escribe tu mensaje aquí...");

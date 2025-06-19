@@ -1,6 +1,8 @@
 package com.telecomsockets.views;
 
-import com.telecomsockets.views.StatusLabel.StatusData;
+import com.telecomsockets.components.StatusLabel;
+import com.telecomsockets.components.StatusLabel.StatusData;
+
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
@@ -42,13 +44,11 @@ public class AppLayoutView extends BorderPane {
         return title;
     }
 
-
     private StringProperty subStatus = new SimpleStringProperty();
 
     protected StringProperty subStatusProperty() {
         return subStatus;
     }
-
 
     public void bindTitle(String title, StringProperty name) {
         titleProperty()
@@ -72,7 +72,6 @@ public class AppLayoutView extends BorderPane {
         container.setPadding(new Insets(5));
         HBox.setHgrow(titlePane, Priority.ALWAYS);
 
-
         return container;
     }
 
@@ -80,12 +79,10 @@ public class AppLayoutView extends BorderPane {
         return statusData;
     }
 
-
     public Region footer() {
         var backButton = new Button("Volver");
         backButton.onActionProperty().bind(onBack);
         backButton.setCancelButton(true);
-
 
         var connectButton = new Button("Conectar");
         connectButton.setDefaultButton(true);
@@ -99,7 +96,6 @@ public class AppLayoutView extends BorderPane {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         var footer = new HBox(10, backButton, spacer, connectButton);
-
 
         footer.setAlignment(Pos.CENTER_RIGHT);
         footer.setPadding(new Insets(10));

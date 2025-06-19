@@ -1,29 +1,39 @@
 package com.telecomsockets;
 
 import java.util.List;
-import com.telecomsockets.client.ClientController;
 import com.telecomsockets.contracts.Controller;
-import com.telecomsockets.primary.PrimaryController;
-import com.telecomsockets.server.ServerController;
+import com.telecomsockets.controllers.ClientController;
+import com.telecomsockets.controllers.PrimaryController;
+import com.telecomsockets.controllers.ServerController;
+import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.layout.Region;
 import javafx.stage.Stage;
 
 public final class Navigation {
 
-    static Stage stage;
-    static MainApp mainApp;
-    static Controller currentController;
+    private static Stage stage;
+    private static Controller currentController;
 
-    private Navigation() {
-        // Prevent instantiation
+    private Navigation() {}
+
+    private static void setSceneRoot(Parent root) {
+        Scene scene = stage.getScene();
+        if (scene == null) {
+            scene = new Scene(root);
+            scene.getStylesheets().add(getStylesheet());
+            stage.setScene(scene);
+            stage.setScene(scene);
+        } else {
+            scene.setRoot(root);
+        }
     }
 
     public static void init(MainApp app, @SuppressWarnings("exports") Stage s) {
         List<String> rawParameters = app.getParameters().getRaw();
         String mode = rawParameters.size() > 0 ? rawParameters.get(0) : "primary";
         stage = s;
-        mainApp = app;
+
         // Set the initial root view
         switch (mode.toLowerCase()) {
             case "client":
@@ -50,7 +60,6 @@ public final class Navigation {
         setRoot(ServerController.class);
     }
 
-
     private static <T extends Controller> void setRoot(Class<T> controllerClass) {
         try {
             T controller = controllerClass.getDeclaredConstructor().newInstance();
@@ -62,14 +71,11 @@ public final class Navigation {
         }
     }
 
-
-
     private static void setRoot(Controller controller) {
         Region root = controller.getView();
-        Scene scene = new Scene(root);
-        scene.getStylesheets().add(getStylesheet());
+        root.setPrefSize(600, 400);
+        setSceneRoot(root);
         stage.titleProperty().bind(controller.titleProperty().orElse("Telecom Sockets"));
-        stage.setScene(scene);
         stage.show();
     }
 

@@ -1,7 +1,7 @@
-package com.telecomsockets.client;
+package com.telecomsockets.views;
 
+import com.telecomsockets.controllers.ClientController;
 import com.telecomsockets.models.ChatUser;
-import com.telecomsockets.views.ChatView;
 
 public class ClientConnectedView extends ChatView {
 
@@ -26,7 +26,5 @@ public class ClientConnectedView extends ChatView {
             }
         });
     }
-
-
 
 }

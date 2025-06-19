@@ -1,7 +1,6 @@
-package com.telecomsockets.client;
+package com.telecomsockets.sockets;
 
 import java.io.EOFException;
-import java.io.IOException;
 import java.net.ConnectException;
 import java.net.Socket;
 import java.net.SocketException;
@@ -11,9 +10,9 @@ import com.telecomsockets.MainApp;
 import com.telecomsockets.models.ChatMessageModel;
 import com.telecomsockets.models.ChatUser;
 import com.telecomsockets.services.MessageBrokerService;
+import com.telecomsockets.util.ConsumerProperty;
 import javafx.application.Platform;
 import javafx.beans.binding.BooleanBinding;
-import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -32,26 +31,20 @@ public class SocketClient {
     private Socket clientSocket;
     private UUID clientId = UUID.randomUUID();
     private MessageBrokerService messageBrokerService;
+    private Thread backgroundThread;
 
     private void setConnectionState(ConnectionState state) {
         connectionStateProperty().set(state);
     }
 
-    public ConnectionState getConnectionState() {
-        return connectionStateProperty().get();
-    }
-
     public boolean getIsConnected() {
-        return isConnectedProperty().get();
+        return is(ConnectionState.CONNECTED).get();
     }
 
-    public BooleanBinding isConnectedProperty() {
-        return connectionStateProperty().isEqualTo(ConnectionState.CONNECTED);
+    public BooleanBinding is(ConnectionState state) {
+        return connectionStateProperty().isEqualTo(state);
     }
 
-    public BooleanBinding isConnectingProperty() {
-        return connectionStateProperty().isEqualTo(ConnectionState.CONNECTING);
-    }
 
     public StringProperty clientNameProperty() {
         return clientName;
@@ -83,8 +76,7 @@ public class SocketClient {
         }
         messageBrokerService = new MessageBrokerService(clientSocket);
 
-
-        messageBrokerService.receiver.setOnMessageReceived(this::notifyMessageReceived);
+        messageBrokerService.receiver.setOnMessageReceived(onMessageReceived::accept);
         messageBrokerService.receiver.setOnUsersListReceived(users::setAll);
         messageBrokerService.receiver.setOnHandshake(handshake -> {
             System.out.println("Handshake recibido: " + handshake);
@@ -107,7 +99,6 @@ public class SocketClient {
         return String.format("%s:%d", address.getHostAddress(), socket.getPort());
 
     }
-
 
     public void connect(String name, String ip, int port) {
         setClientName(name);
@@ -139,10 +130,9 @@ public class SocketClient {
                     return;
                 }
 
-
                 try {
                     SocketClient.this.close();
-                } catch (IOException e) {
+                } catch (Exception e) {
                 }
 
                 if (error instanceof EOFException) {
@@ -160,7 +150,12 @@ public class SocketClient {
             }
         };
 
-        new Thread(task).start();
+        if (backgroundThread != null && backgroundThread.isAlive()) {
+            backgroundThread.interrupt();
+        }
+
+        backgroundThread = new Thread(task, "SocketClient-BackgroundThread");
+        backgroundThread.start();
     }
 
     public void disconnect() {
@@ -174,7 +169,7 @@ public class SocketClient {
             close();
             setConnectionState(ConnectionState.DISCONNECTED);
             System.out.println("Desconectado del servidor.");
-        } catch (IOException e) {
+        } catch (Exception e) {
             if (clientSocket != null && !clientSocket.isClosed()) {
                 setConnectionState(ConnectionState.CONNECTED);
             } else {
@@ -185,25 +180,11 @@ public class SocketClient {
 
     }
 
-    private final ObjectProperty<MessageReceivedHandler> onMessageReceived =
-            new SimpleObjectProperty<>(this, "onMessageReceived", null);
+    private final ConsumerProperty<ChatMessageModel> onMessageReceived =
+            new ConsumerProperty<>(this, "onMessageReceived");
 
-    public ObjectProperty<MessageReceivedHandler> onMessageReceivedProperty() {
-        return onMessageReceived;
-    }
-
-    public void setOnMessageReceived(MessageReceivedHandler callback) {
+    public void setOnMessageReceived(Consumer<ChatMessageModel> callback) {
         onMessageReceived.set(callback);
-    }
-
-    private void notifyMessageReceived(ChatMessageModel message) {
-        var handler = onMessageReceived.get();
-        if (handler != null) {
-            handler.accept(message);
-        }
-    }
-
-    interface MessageReceivedHandler extends Consumer<ChatMessageModel> {
     }
 
 
@@ -217,7 +198,7 @@ public class SocketClient {
             return;
         }
 
-        notifyMessageReceived(new ChatMessageModel(message, toChatUser(), getUser(receiverId)));
+        onMessageReceived.accept(new ChatMessageModel(message, toChatUser(), getUser(receiverId)));
         messageBrokerService.sender.sendMessageToServer(message, clientId, receiverId);
     }
 
@@ -229,11 +210,22 @@ public class SocketClient {
         return clientName.get();
     }
 
-    public void close() throws IOException {
+    public void close() throws Exception {
         if (clientSocket != null && !clientSocket.isClosed()) {
             clientSocket.close();
         }
         clientSocket = null;
+
+        if (messageBrokerService != null) {
+            messageBrokerService.close();
+            messageBrokerService = null;
+        }
+
+        if (backgroundThread != null) {
+            backgroundThread.interrupt();
+            backgroundThread.join();
+            backgroundThread = null;
+        }
     }
 
     private StringProperty serverName = new SimpleStringProperty(this, "serverName");

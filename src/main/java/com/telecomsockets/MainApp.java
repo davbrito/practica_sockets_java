@@ -14,10 +14,10 @@ public class MainApp extends Application {
 
     @Override
     public void stop() throws Exception {
+        System.out.println("Application is stopping...");
         Navigation.cleanUp();
+        System.out.println("Application stopped.");
     }
-
-
 
     public static void errorAlert(String title) {
         errorAlert(null, title);
@@ -51,7 +51,6 @@ public class MainApp extends Application {
 
         new Alert(Alert.AlertType.ERROR, message).showAndWait();
     }
-
 
     public static void main(String[] args) {
         launch(args);

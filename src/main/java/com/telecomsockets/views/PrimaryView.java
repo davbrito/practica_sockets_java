@@ -1,4 +1,6 @@
-package com.telecomsockets.primary;
+package com.telecomsockets.views;
+
+import com.telecomsockets.controllers.PrimaryController;
 
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;

@@ -1,13 +1,15 @@
-package com.telecomsockets.server;
+package com.telecomsockets.views;
 
 import com.telecomsockets.MainApp;
 import com.telecomsockets.Navigation;
+import com.telecomsockets.components.AddressForm;
+import com.telecomsockets.components.StatusLabel.StatusData;
+import com.telecomsockets.controllers.ServerController;
 import com.telecomsockets.models.AddressModel;
-import com.telecomsockets.server.SocketServer.ServerState;
-import com.telecomsockets.views.AddressForm;
-import com.telecomsockets.views.AppLayoutView;
-import com.telecomsockets.views.StatusLabel.StatusData;
+import com.telecomsockets.sockets.SocketServer;
+import com.telecomsockets.sockets.SocketServer.ServerState;
 import javafx.beans.value.ObservableValue;
+import javafx.event.ActionEvent;
 import javafx.scene.control.Label;
 import javafx.scene.layout.Region;
 
@@ -18,14 +20,15 @@ public class ServerView extends AppLayoutView {
 
     public ServerView(ServerController controller) {
         super();
+
         this.controller = controller;
         this.server = controller.server;
-        bindTitle("Servidor", controller.addressModel().name);
-        createView();
+
+        this.bindTitle("Servidor", controller.addressModel().name);
+        this.createView();
     }
 
     private void createView() {
-        setPrefSize(600, 400);
         setupFooter();
         centerProperty().bind(getContent());
     }
@@ -39,31 +42,31 @@ public class ServerView extends AppLayoutView {
     }
 
     public void setupFooter() {
-        setOnBack(e -> {
-            if (!server.getIsStopped()) {
-                // Si está conectado, desconectar antes de volver
-                System.out.println("Desconectando del servidor...");
-                try {
-                    server.stop();
-                } catch (Exception e1) {
-                    MainApp.errorAlert(e1, "Error al desconectar del servidor");
-                }
-                return;
-            }
-
-            Navigation.toPrimary();
-        });
+        setOnBack(this::onBack);
         setOnConnect(e -> onConnect());
 
         statusDataProperty().bind(StatusData.fromServer(server.serverStateProperty()));
 
         // Solo mostrar si no está conectado
-        disableConnectProperty()
-                .bind(server.serverStateProperty().isEqualTo(ServerState.LISTENING));
+        disableConnectProperty().bind(server.is(ServerState.LISTENING));
+        showConnectProperty().bind(server.is(ServerState.CONNECTED));
 
-        showConnectProperty()
-                .bind(server.serverStateProperty().isNotEqualTo(ServerState.CONNECTED));
+    }
 
+
+    public void onBack(ActionEvent e) {
+        if (!server.getIsStopped()) {
+            // Si está conectado, desconectar antes de volver
+            System.out.println("Desconectando del servidor...");
+            try {
+                server.stop();
+            } catch (Exception e1) {
+                MainApp.errorAlert(e1, "Error al desconectar del servidor");
+            }
+            return;
+        }
+
+        Navigation.toPrimary();
     }
 
     private void onConnect() {
@@ -90,8 +93,7 @@ public class ServerView extends AppLayoutView {
     private Region getAddressForm() {
         var form = new AddressForm(controller.addressModel());
         form.setOnConnect(e -> onConnect());
-        form.formDisabledProperty()
-                .bind(server.serverStateProperty().isEqualTo(ServerState.LISTENING));
+        form.formDisabledProperty().bind(server.is(ServerState.LISTENING));
         return form;
     }
 

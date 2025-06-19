@@ -1,4 +1,4 @@
-package com.telecomsockets.views;
+package com.telecomsockets.components;
 
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.StringProperty;

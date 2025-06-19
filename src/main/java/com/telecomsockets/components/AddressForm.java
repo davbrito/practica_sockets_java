@@ -1,7 +1,9 @@
-package com.telecomsockets.views;
+package com.telecomsockets.components;
 
 import java.util.stream.Stream;
+
 import com.telecomsockets.models.AddressModel;
+
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -42,7 +44,6 @@ public class AddressForm extends VBox {
                     field.disableProperty().bind(formDisabled);
                     field.setOnKeyReleased(this::handleEnterKeyPress);
                 });
-
 
         portField.getTextField().setTextFormatter(new TextFormatter<>(change -> {
             String newText = change.getControlNewText();
@@ -126,8 +127,7 @@ public class AddressForm extends VBox {
             return true; // Allow localhost as a valid IP
         }
         // Regular expression to validate IPv4 addresses
-        String PATTERN =
-                "^((0|1\\d?\\d?|2[0-4]?\\d?|25[0-5]?|[3-9]\\d?)\\.){3}(0|1\\d?\\d?|2[0-4]?\\d?|25[0-5]?|[3-9]\\d?)$";
+        String PATTERN = "^((0|1\\d?\\d?|2[0-4]?\\d?|25[0-5]?|[3-9]\\d?)\\.){3}(0|1\\d?\\d?|2[0-4]?\\d?|25[0-5]?|[3-9]\\d?)$";
 
         return ip.matches(PATTERN);
     }

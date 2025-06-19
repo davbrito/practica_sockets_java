@@ -1,8 +1,11 @@
 package com.telecomsockets.views;
 
+import com.telecomsockets.components.MessageInputBox;
+import com.telecomsockets.components.MessageInputBox.SendHandler;
+import com.telecomsockets.components.MessageList;
 import com.telecomsockets.models.ChatMessageModel;
 import com.telecomsockets.models.ChatUser;
-import com.telecomsockets.views.MessageInputBox.SendHandler;
+
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyObjectProperty;
@@ -43,7 +46,6 @@ public class ChatView extends BorderPane {
         return list;
     }
 
-
     private ObservableValue<Node> createCenter(ChatUser me) {
         return Bindings.when(selectedItemProperty().isNull())
                 .<Node>then(new Label("Seleccione un chat para ver sus mensajes")).otherwise(createChat(me))
@@ -81,7 +83,6 @@ public class ChatView extends BorderPane {
         return messageInputBox;
     }
 
-
     private Node createTitle(String myName) {
         var container = new VBox();
         var titleLabel = new Label();
@@ -90,6 +91,5 @@ public class ChatView extends BorderPane {
         container.getChildren().add(titleLabel);
         return container;
     }
-
 
 }

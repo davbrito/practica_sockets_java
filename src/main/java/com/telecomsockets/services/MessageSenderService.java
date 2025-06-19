@@ -6,6 +6,7 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
+
 import com.telecomsockets.MainApp;
 import com.telecomsockets.models.ChatMessageModel;
 import com.telecomsockets.models.ChatMessageRequest;
@@ -18,6 +19,7 @@ public final class MessageSenderService implements AutoCloseable {
     private ObjectOutputStream out;
     private LinkedBlockingQueue<Serializable> messageQueue;
     private Thread senderThread;
+    private static int instanceCount = 0;
 
     public MessageSenderService(ObjectOutputStream out) {
 
@@ -27,7 +29,7 @@ public final class MessageSenderService implements AutoCloseable {
 
         this.out = out;
         this.messageQueue = new LinkedBlockingQueue<>();
-        this.senderThread = new Thread(this::run);
+        this.senderThread = new Thread(this::run, "MessageSenderThread-" + instanceCount++);
         this.senderThread.start();
     }
 
@@ -35,7 +37,6 @@ public final class MessageSenderService implements AutoCloseable {
         try {
             while (true) {
                 Serializable data = messageQueue.take();
-
 
                 try {
                     out.writeObject(data);
@@ -87,6 +88,7 @@ public final class MessageSenderService implements AutoCloseable {
         if (senderThread != null && senderThread.isAlive()) {
             senderThread.interrupt();
             senderThread.join();
+            senderThread = null;
         }
 
     }

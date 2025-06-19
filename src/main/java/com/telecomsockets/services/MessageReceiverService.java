@@ -6,9 +6,11 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
-import com.telecomsockets.models.ChatUser;
+
 import com.telecomsockets.models.ChatMessageModel;
 import com.telecomsockets.models.ChatMessageRequest;
+import com.telecomsockets.models.ChatUser;
+
 import javafx.application.Platform;
 
 public class MessageReceiverService {
@@ -17,7 +19,6 @@ public class MessageReceiverService {
     enum GenericRequests {
         REQUEST_CLIENT_LIST
     }
-
 
     public MessageReceiverService(ObjectInputStream in) {
         this.in = in;
@@ -28,6 +29,11 @@ public class MessageReceiverService {
             Object temp;
 
             while ((temp = in.readObject()) != null) {
+                if (Thread.interrupted()) {
+                    System.out.println("MessageReceiverService thread interrupted, stopping message reception.");
+                    break;
+                }
+
                 var object = temp;
                 Platform.runLater(() -> {
                     switch (object) {
@@ -39,18 +45,18 @@ public class MessageReceiverService {
                             switch (request) {
                                 case REQUEST_CLIENT_LIST -> notifyRequestClientList();
                                 default -> System.out.println("Received unknown request: " + request);
-                            };
+                            }
+                            ;
                         }
                         default -> System.out.println("Received unknown object: " + object);
-                    };
+                    }
+                    ;
                 });
 
             }
 
         }
     }
-
-
 
     private Consumer<ChatMessageModel> onMessageReceived;
     private Consumer<Handshake> onHandshake;
@@ -67,8 +73,6 @@ public class MessageReceiverService {
     public void setOnMessageRequest(Consumer<ChatMessageRequest> onMessageRequest) {
         this.onMessageRequest = onMessageRequest;
     }
-
-
 
     private void notifyMessageReceived(ChatMessageModel message) {
         if (onMessageReceived != null) {
@@ -113,7 +117,6 @@ public class MessageReceiverService {
         }
     }
 
-
     Consumer<List<ChatUser>> onUsersListReceived;
 
     public void setOnUsersListReceived(Consumer<List<ChatUser>> onUsersListReceived) {
@@ -132,6 +135,5 @@ public class MessageReceiverService {
             in = null;
         }
     }
-
 
 }

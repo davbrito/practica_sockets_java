@@ -1,16 +1,17 @@
-package com.telecomsockets.server;
+package com.telecomsockets.views;
 
 import java.util.List;
 import java.util.UUID;
+
+import com.telecomsockets.controllers.ServerController;
 import com.telecomsockets.models.ChatUser;
-import com.telecomsockets.server.SocketServer.ClientHandler;
-import com.telecomsockets.views.ChatView;
+import com.telecomsockets.sockets.SocketServer.ClientHandler;
+
 import javafx.collections.FXCollections;
 import javafx.collections.MapChangeListener;
 import javafx.collections.ObservableMap;
 
 public class ServerConnectedView extends ChatView {
-
 
     public ServerConnectedView(ServerController controller) {
         super(controller.server.toChatUser());
@@ -32,13 +33,10 @@ public class ServerConnectedView extends ChatView {
             }
         });
 
-
     }
 
     private static List<ChatUser> mapToList(ObservableMap<? extends UUID, ? extends ClientHandler> observableMap) {
         return observableMap.values().stream().map(ClientHandler::toChatUser).toList();
     }
-
-
 
 }

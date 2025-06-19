@@ -1,9 +1,12 @@
-package com.telecomsockets.server;
+package com.telecomsockets.controllers;
 
 import com.telecomsockets.contracts.Controller;
 import com.telecomsockets.models.AddressModel;
 import com.telecomsockets.models.ChatDictModel;
 import com.telecomsockets.models.ChatUser;
+import com.telecomsockets.sockets.SocketServer;
+import com.telecomsockets.views.ServerView;
+
 import javafx.scene.layout.Region;
 
 public class ServerController extends Controller {
@@ -31,7 +34,7 @@ public class ServerController extends Controller {
         server.close();
     }
 
-    void sendMessage(ChatUser receiver, String message) {
+    public void sendMessage(ChatUser receiver, String message) {
         var handler = server.getClientHandler(receiver.id());
 
         if (handler == null) {
@@ -42,6 +45,5 @@ public class ServerController extends Controller {
         handler.sendMessageToReceiver(message, server.toChatUser(), receiver);
 
     }
-
 
 }

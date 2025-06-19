@@ -1,7 +1,8 @@
-package com.telecomsockets.views;
+package com.telecomsockets.components;
 
-import com.telecomsockets.client.SocketClient.ConnectionState;
-import com.telecomsockets.server.SocketServer.ServerState;
+import com.telecomsockets.sockets.SocketClient.ConnectionState;
+import com.telecomsockets.sockets.SocketServer.ServerState;
+
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -24,7 +25,6 @@ public class StatusLabel extends HBox {
         data.set(statusData);
     }
 
-
     public StatusLabel() {
         super();
         getStyleClass().add("status-label");
@@ -43,8 +43,6 @@ public class StatusLabel extends HBox {
 
         getChildren().addAll(label, subLabel);
 
-
-
         // textProperty().bind(data.map(StatusData::message));
         styleProperty().bind(data.map(x -> {
             var color = Color.web(x.color);
@@ -59,7 +57,6 @@ public class StatusLabel extends HBox {
         return String.format("rgb(%d, %d, %d)", (int) (color.getRed() * 255), (int) (color.getGreen() * 255),
                 (int) (color.getBlue() * 255));
     }
-
 
     public ObjectProperty<StatusData> dataProperty() {
         return data;
