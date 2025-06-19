@@ -30,6 +30,14 @@
 
     </dependencies>
 
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://github.com/davbrito/practica_sockets_java</url>
+        </repository>
+    </distributionManagement>
+
     <build>
         <plugins>
             <!-- sets up the version of Java you are running -->
