@@ -3,12 +3,10 @@ package com.telecomsockets.components;
 import java.util.stream.Stream;
 
 import com.telecomsockets.models.AddressModel;
+import com.telecomsockets.util.RunnableProperty;
 
 import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.property.SimpleObjectProperty;
-import javafx.event.EventHandler;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.TextFormatter;
@@ -23,8 +21,7 @@ public class AddressForm extends VBox {
     private final AddressModel addressModel;
 
     private SimpleBooleanProperty formDisabled = new SimpleBooleanProperty(false);
-
-    private ObjectProperty<EventHandler<KeyEvent>> onConnect;
+    private RunnableProperty onConnect = new RunnableProperty();
 
     public AddressForm(AddressModel addressModel) {
         super();
@@ -36,14 +33,16 @@ public class AddressForm extends VBox {
 
         nameField = new FormField("Nombre:", "Ej: Juan", addressModel.name.get());
         addressField = new FormField("Dirección del servidor:", "Ej: 8080", addressModel.ip.get());
-        portField = new FormField("Puerto:", "Ej: localhost",
-                Integer.toString(addressModel.port.get()));
+        portField = new FormField("Puerto:", "Ej: localhost", Integer.toString(addressModel.port.get()));
 
-        Stream.of(nameField, addressField, portField).map(field -> field.getTextField())
-                .forEach(field -> {
-                    field.disableProperty().bind(formDisabled);
-                    field.setOnKeyReleased(this::handleEnterKeyPress);
-                });
+        if (nameField.getTextField().getText().isEmpty()) {
+            nameField.getTextField().setText(AddressModel.generateRandomName());
+        }
+
+        Stream.of(nameField, addressField, portField).map(field -> field.getTextField()).forEach(field -> {
+            field.disableProperty().bind(formDisabled);
+            field.setOnKeyReleased(this::handleEnterKeyPress);
+        });
 
         portField.getTextField().setTextFormatter(new TextFormatter<>(change -> {
             String newText = change.getControlNewText();
@@ -60,20 +59,23 @@ public class AddressForm extends VBox {
 
     private void handleEnterKeyPress(KeyEvent e) {
         // enter key pressed, submit
-        if (e.getCode() == KeyCode.ENTER && validate()) {
-            onConnect.get().handle(e);
+        if (e.getCode() == KeyCode.ENTER) {
+            submit();
         }
     }
 
-    public ObjectProperty<EventHandler<KeyEvent>> onConnectProperty() {
-        if (onConnect == null) {
-            onConnect = new SimpleObjectProperty<>();
-        }
+    public RunnableProperty onConnectProperty() {
         return onConnect;
     }
 
-    public void setOnConnect(EventHandler<KeyEvent> handler) {
+    public void setOnConnect(Runnable handler) {
         onConnectProperty().set(handler);
+    }
+
+    public void submit() {
+        if (validate()) {
+            onConnect.run();
+        }
     }
 
     public boolean validate() {

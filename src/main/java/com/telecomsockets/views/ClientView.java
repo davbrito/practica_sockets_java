@@ -7,6 +7,7 @@ import com.telecomsockets.controllers.ClientController;
 import com.telecomsockets.models.AddressModel;
 import com.telecomsockets.sockets.SocketClient;
 import com.telecomsockets.sockets.SocketClient.ConnectionState;
+
 import javafx.beans.binding.Bindings;
 import javafx.event.ActionEvent;
 import javafx.scene.control.Label;
@@ -29,7 +30,6 @@ public class ClientView extends AppLayoutView {
 
     private void createView() {
         setOnBack(this::onBack);
-        setOnConnect(e -> onConnect());
 
         statusDataProperty().bind(StatusData.fromClient(client.connectionStateProperty()));
         subStatusProperty().bind(Bindings.when(client.is(ConnectionState.CONNECTED))
@@ -49,7 +49,7 @@ public class ClientView extends AppLayoutView {
         if (client.getIsConnected()) {
             // Si está conectado, desconectar antes de volver
             System.out.println("Desconectando del servidor...");
-            client.disconnect();
+            client.stop();
             return;
         }
 
@@ -65,19 +65,20 @@ public class ClientView extends AppLayoutView {
         int port = addressModel.port.get();
         String name = addressModel.name.get();
 
-        System.out.println(String.format("Intentando conectar a %s:%d", ip, port));
+        System.out.println(String.format("Intentando conectar a %s:%d con el nombre %s", ip, port, name));
 
         if (client.getIsConnected()) {
-            client.disconnect();
+            client.stop();
         } else {
-            client.connect(name, ip, port);
+            client.start(ip, port);
         }
     }
 
     private Region getAddressForm() {
         var form = new AddressForm(controller.addressModel());
-        form.setOnConnect(e -> onConnect());
+        form.setOnConnect(this::onConnect);
         form.formDisabledProperty().bind(client.is(ConnectionState.CONNECTING));
+        setOnConnect(form::submit);
         return form;
     }
 

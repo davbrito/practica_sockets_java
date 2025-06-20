@@ -3,7 +3,7 @@ package com.telecomsockets.util;
 import java.util.function.Consumer;
 import javafx.beans.property.SimpleObjectProperty;
 
-public class ConsumerProperty<T> extends SimpleObjectProperty<Consumer<T>> {
+public class ConsumerProperty<T> extends SimpleObjectProperty<Consumer<T>> implements Consumer<T> {
 
     public ConsumerProperty() {
         super();
@@ -21,6 +21,7 @@ public class ConsumerProperty<T> extends SimpleObjectProperty<Consumer<T>> {
         super(bean, name, initialValue);
     }
 
+    @Override
     public void accept(T value) {
         Consumer<T> consumer = get();
 

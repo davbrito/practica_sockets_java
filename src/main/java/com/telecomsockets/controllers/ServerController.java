@@ -11,14 +11,15 @@ import javafx.scene.layout.Region;
 
 public class ServerController extends Controller {
 
-    private AddressModel addressModel = new AddressModel();
-    public SocketServer server = new SocketServer();
+    private final AddressModel addressModel = new AddressModel();
+    public final SocketServer server = new SocketServer();
     public final ChatDictModel messages = new ChatDictModel(server.getServerId());
 
     {
         setTitle("Telecom Sockets Server");
 
         server.setOnMessageReceived(messages::addMessageToChat);
+        server.serverNameProperty().bindBidirectional(addressModel.name);
     }
 
     public Region getView() {
@@ -35,14 +36,7 @@ public class ServerController extends Controller {
     }
 
     public void sendMessage(ChatUser receiver, String message) {
-        var handler = server.getClientHandler(receiver.id());
-
-        if (handler == null) {
-            System.out.println("No handler found for receiver: " + receiver.id());
-            return;
-        }
-
-        handler.sendMessageToReceiver(message, server.toChatUser(), receiver);
+        server.sendMessageToReceiver(message, server.toChatUser(), receiver);
 
     }
 

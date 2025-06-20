@@ -6,7 +6,6 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
-
 import com.telecomsockets.MainApp;
 import com.telecomsockets.models.ChatMessageModel;
 import com.telecomsockets.models.ChatMessageRequest;
@@ -21,7 +20,7 @@ public final class MessageSenderService implements AutoCloseable {
     private Thread senderThread;
     private static int instanceCount = 0;
 
-    public MessageSenderService(ObjectOutputStream out) {
+    public MessageSenderService(ObjectOutputStream out, UUID senderId) {
 
         if (out == null) {
             throw new IllegalArgumentException("Output stream cannot be null.");
@@ -51,8 +50,8 @@ public final class MessageSenderService implements AutoCloseable {
         }
     }
 
-    public void sendMessageToServer(String text, UUID senderId, UUID receiverId) {
-        sendMessageImpl(new ChatMessageRequest(text, senderId, receiverId));
+    public void sendMessageToServer(String text, UUID receiverId) {
+        sendMessageImpl(new ChatMessageRequest(text, receiverId));
     }
 
     public void sendMessageToReceiver(String text, ChatUser sender, ChatUser receiver) {

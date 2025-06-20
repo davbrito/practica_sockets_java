@@ -92,11 +92,6 @@ public class MessageReceiverService {
         }
     }
 
-    @FunctionalInterface
-    public interface Handler {
-        void handle();
-    }
-
     public record UserListResponse(List<ChatUser> users) implements Serializable {
 
     }
@@ -105,15 +100,15 @@ public class MessageReceiverService {
 
     }
 
-    Handler onRequestClientList;
+    Runnable onRequestClientList;
 
-    public void setOnRequestClientList(Handler onRequestClientList) {
+    public void setOnRequestClientList(Runnable onRequestClientList) {
         this.onRequestClientList = onRequestClientList;
     }
 
     public void notifyRequestClientList() {
         if (onRequestClientList != null) {
-            onRequestClientList.handle();
+            onRequestClientList.run();
         }
     }
 

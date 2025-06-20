@@ -6,11 +6,13 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.util.UUID;
 import java.util.function.Consumer;
+
 import com.telecomsockets.MainApp;
 import com.telecomsockets.models.ChatMessageModel;
 import com.telecomsockets.models.ChatUser;
 import com.telecomsockets.services.MessageBrokerService;
 import com.telecomsockets.util.ConsumerProperty;
+
 import javafx.application.Platform;
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.SimpleObjectProperty;
@@ -18,7 +20,6 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.concurrent.Task;
 
 public class SocketClient {
 
@@ -45,7 +46,6 @@ public class SocketClient {
         return connectionStateProperty().isEqualTo(state);
     }
 
-
     public StringProperty clientNameProperty() {
         return clientName;
     }
@@ -62,7 +62,7 @@ public class SocketClient {
         return connectionState;
     }
 
-    private void connectImpl(String ip, int port) throws Exception {
+    private void connect(String ip, int port) throws Exception {
         if (clientSocket != null && clientSocket.isConnected()) {
             MainApp.errorAlert("Ya está conectado al servidor en " + ip + ":" + port);
             return;
@@ -74,7 +74,7 @@ public class SocketClient {
             MainApp.errorAlert("No se pudo conectar al servidor en " + ip + ":" + port);
             return;
         }
-        messageBrokerService = new MessageBrokerService(clientSocket);
+        messageBrokerService = new MessageBrokerService(clientSocket, clientId);
 
         messageBrokerService.receiver.setOnMessageReceived(onMessageReceived::accept);
         messageBrokerService.receiver.setOnUsersListReceived(users::setAll);
@@ -100,65 +100,48 @@ public class SocketClient {
 
     }
 
-    public void connect(String name, String ip, int port) {
-        setClientName(name);
-
-        var task = new Task<Void>() {
-            @Override
-            protected void scheduled() {
-                setConnectionState(ConnectionState.CONNECTING);
-            }
-
-            @Override
-            protected Void call() throws Exception {
-                connectImpl(ip, port);
-                return null;
-            }
-
-            @Override
-            protected void succeeded() {
-                setConnectionState(ConnectionState.DISCONNECTED);
-            }
-
-            @Override
-            protected void failed() {
-
-                setConnectionState(ConnectionState.DISCONNECTED);
-                var error = getException();
-
-                if (error instanceof SocketException && !(error instanceof ConnectException) && clientSocket == null) {
-                    return;
-                }
-
-                try {
-                    SocketClient.this.close();
-                } catch (Exception e) {
-                }
-
-                if (error instanceof EOFException) {
-                    System.out.println("Conexión cerrada por el servidor.");
-
-                    return;
-                }
-
-                MainApp.errorAlert(error, "Error");
-            }
-
-            @Override
-            protected void cancelled() {
-                setConnectionState(ConnectionState.DISCONNECTED);
-            }
-        };
-
+    public void start(String ip, int port) {
         if (backgroundThread != null && backgroundThread.isAlive()) {
             backgroundThread.interrupt();
         }
 
-        backgroundThread = new Thread(task, "SocketClient-BackgroundThread");
+        backgroundThread = new Thread(runClient(ip, port), "SocketClient-BackgroundThread");
         backgroundThread.start();
     }
 
-    public void disconnect() {
+    private Runnable runClient(String ip, int port) {
+        return () -> {
+            try {
+                Platform.runLater(() -> setConnectionState(ConnectionState.CONNECTING));
+                connect(ip, port);
+                Platform.runLater(() -> setConnectionState(ConnectionState.DISCONNECTED));
+            } catch (final Exception error) {
+                Platform.runLater(() -> {
+                    setConnectionState(ConnectionState.DISCONNECTED);
+
+                    if (error instanceof SocketException && !(error instanceof ConnectException)
+                            && clientSocket == null) {
+                        return;
+                    }
+
+                    try {
+                        SocketClient.this.close();
+                    } catch (Exception e) {
+                    }
+
+                    if (error instanceof EOFException) {
+                        System.out.println("Conexión cerrada por el servidor.");
+
+                        return;
+                    }
+
+                    MainApp.errorAlert(error);
+                });
+            }
+        };
+    }
+
+    public void stop() {
         if (clientSocket == null || !clientSocket.isConnected()) {
             System.out.println("No hay conexión activa para desconectar.");
             return;
@@ -180,13 +163,12 @@ public class SocketClient {
 
     }
 
-    private final ConsumerProperty<ChatMessageModel> onMessageReceived =
-            new ConsumerProperty<>(this, "onMessageReceived");
+    private final ConsumerProperty<ChatMessageModel> onMessageReceived = new ConsumerProperty<>(this,
+            "onMessageReceived");
 
     public void setOnMessageReceived(Consumer<ChatMessageModel> callback) {
         onMessageReceived.set(callback);
     }
-
 
     private ChatUser getUser(UUID userId) {
         return getUsers().stream().filter(user -> user.id().equals(userId)).findFirst().orElse(null);
@@ -199,7 +181,7 @@ public class SocketClient {
         }
 
         onMessageReceived.accept(new ChatMessageModel(message, toChatUser(), getUser(receiverId)));
-        messageBrokerService.sender.sendMessageToServer(message, clientId, receiverId);
+        messageBrokerService.sender.sendMessageToServer(message, receiverId);
     }
 
     public String getClientName() {
@@ -232,10 +214,6 @@ public class SocketClient {
 
     public StringProperty serverNameProperty() {
         return serverName;
-    }
-
-    public String getServerName() {
-        return serverName.get();
     }
 
     private final ObservableList<ChatUser> users = FXCollections.observableArrayList();

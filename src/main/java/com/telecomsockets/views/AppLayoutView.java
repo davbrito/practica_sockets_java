@@ -2,10 +2,12 @@ package com.telecomsockets.views;
 
 import com.telecomsockets.components.StatusLabel;
 import com.telecomsockets.components.StatusLabel.StatusData;
+import com.telecomsockets.util.RunnableProperty;
 
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.ReadOnlyStringProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -27,7 +29,7 @@ public class AppLayoutView extends BorderPane {
 
     private ObjectProperty<StatusData> statusData = new SimpleObjectProperty<>();
     private ObjectProperty<EventHandler<ActionEvent>> onBack = new SimpleObjectProperty<>();
-    private ObjectProperty<EventHandler<ActionEvent>> onConnect = new SimpleObjectProperty<>();
+    private RunnableProperty onConnect = new RunnableProperty();
     private BooleanProperty showConnect = new SimpleBooleanProperty(true);
     private BooleanProperty disableConnect = new SimpleBooleanProperty(false);
 
@@ -50,9 +52,11 @@ public class AppLayoutView extends BorderPane {
         return subStatus;
     }
 
-    public void bindTitle(String title, StringProperty name) {
+    public void bindTitle(String title, ReadOnlyStringProperty name) {
         titleProperty()
-                .bind(Bindings.when(name.isEmpty()).then(title).otherwise(Bindings.format("%s (%s)", title, name)));
+                .bind(Bindings.when(name.isNull().or(name.isEmpty()))
+                        .then(title)
+                        .otherwise(Bindings.format("%s (%s)", title, name)));
     }
 
     private Node header() {
@@ -86,7 +90,11 @@ public class AppLayoutView extends BorderPane {
 
         var connectButton = new Button("Conectar");
         connectButton.setDefaultButton(true);
-        connectButton.onActionProperty().bind(onConnect);
+        connectButton.onActionProperty().bind(onConnect.map(handler -> e -> {
+            if (handler != null) {
+                handler.run();
+            }
+        }));
         // Solo mostrar si no está conectado
         connectButton.visibleProperty().bind(showConnect);
         connectButton.managedProperty().bind(showConnect);
@@ -116,7 +124,7 @@ public class AppLayoutView extends BorderPane {
         onBack.set(handler);
     }
 
-    public void setOnConnect(EventHandler<ActionEvent> handler) {
+    public void setOnConnect(Runnable handler) {
         onConnect.set(handler);
     }
 

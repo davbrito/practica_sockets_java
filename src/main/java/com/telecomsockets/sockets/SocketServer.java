@@ -9,11 +9,13 @@ import java.net.SocketException;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+
 import com.telecomsockets.MainApp;
 import com.telecomsockets.models.ChatMessageModel;
 import com.telecomsockets.models.ChatMessageRequest;
 import com.telecomsockets.models.ChatUser;
 import com.telecomsockets.services.MessageBrokerService;
+
 import javafx.application.Platform;
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.ObjectProperty;
@@ -24,8 +26,6 @@ import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.MapChangeListener;
 import javafx.collections.ObservableMap;
-import javafx.concurrent.Task;
-import javafx.scene.control.Alert;
 
 public class SocketServer {
 
@@ -54,9 +54,9 @@ public class SocketServer {
     /**
      * The name of the server.
      */
-    private StringProperty serverName = new SimpleStringProperty(this, "serverName", "Servidor");
+    private StringProperty serverName = new SimpleStringProperty(this, "serverName");
 
-    public ReadOnlyStringProperty serverNameProperty() {
+    public StringProperty serverNameProperty() {
         return serverName;
     }
 
@@ -80,7 +80,6 @@ public class SocketServer {
     private Thread backgroundThread;
 
     public void start(String name, String ip, int port) {
-        serverName.set(name);
         System.out.printf("Iniciando servidor (%s) en %s:%d%n", name, ip, port);
 
         if (serverSocket != null && !serverSocket.isClosed()) {
@@ -92,56 +91,35 @@ public class SocketServer {
             backgroundThread.interrupt();
         }
 
-        backgroundThread = new Thread(new Task<Void>() {
-            @Override
-            protected void scheduled() {
-                setServerState(ServerState.LISTENING);
-            }
-
-            @Override
-            protected Void call() throws Exception {
-                bindServer(ip, port);
-
-                Platform.runLater(() -> {
-                    setServerState(ServerState.CONNECTED);
-                });
-
-                listenImpl(ip, port);
-                return null;
-            }
-
-            @Override
-            protected void succeeded() {
-                setServerState(ServerState.STOPPED);
-                System.out.println("Servidor detenido.");
-            }
-
-            @Override
-            protected void failed() {
-                var error = getException();
-
-                if (error instanceof SocketException && serverSocket == null) {
-                    return;
-                }
-
-                error.printStackTrace();
-                setServerState(ServerState.STOPPED);
-
-                var alert = new Alert(Alert.AlertType.ERROR, error.getMessage());
-                alert.showAndWait();
-            }
-
-            @Override
-            protected void cancelled() {
-                setServerState(ServerState.STOPPED);
-            }
-        }, "SocketServer-BackgroundThread");
+        backgroundThread = new Thread(runServer(ip, port), "SocketServer-BackgroundThread");
         backgroundThread.start();
     }
 
-    private void listenImpl(String ip, int port) throws IOException {
+    Runnable runServer(String ip, int port) {
+        return () -> {
+            Platform.runLater(() -> setServerState(ServerState.LISTENING));
+            try {
+                bindServer(ip, port);
+                Platform.runLater(() -> setServerState(ServerState.CONNECTED));
+                listen(ip, port);
+                Platform.runLater(() -> setServerState(ServerState.STOPPED));
+                System.out.println("Servidor detenido.");
+            } catch (IOException error) {
+                Platform.runLater(() -> {
+                    if (error instanceof SocketException && serverSocket == null) {
+                        return;
+                    }
+                    setServerState(ServerState.STOPPED);
+                    MainApp.errorAlert(error);
+                });
+            }
+        };
 
-        System.out.println("Servidor escuchando en " + ip + ":" + port);
+    }
+
+    private void listen(String ip, int port) throws IOException {
+        System.out.printf("Servidor escuchando en %s:%d\n", ip, port);
+
         Socket clientSocket;
 
         while ((clientSocket = serverSocket.accept()) != null) {
@@ -220,6 +198,44 @@ public class SocketServer {
         }
     }
 
+    public void sendMessageToReceiver(ChatMessageRequest message) {
+        sendMessageToReceiver(message.text(), message.receiverId());
+    }
+
+    public void sendMessageToReceiver(String messageText, ChatUser sender, ChatUser receiver) {
+        var messageModel = new ChatMessageModel(messageText, sender, receiver);
+
+        if (receiver.id().equals(serverId) || sender.id().equals(serverId)) {
+            notifyMessageReceived(messageModel);
+
+            if (receiver.id().equals(serverId)) {
+                // If the receiver is the server, we don't need to send it back to the server
+                return;
+            }
+        }
+
+        var client = getClientHandler(receiver.id());
+
+        if (client == null) {
+            MainApp.errorAlert("El receptor no está conectado: " + receiver.id());
+            return;
+        }
+
+        client.messageBrokerService.sender.sendMessageToReceiver(messageModel);
+    }
+
+    void sendMessageToReceiver(String text, UUID receiverId) {
+        var sender = toChatUser();
+        var receiver = getChatUser(receiverId);
+
+        if (receiver == null) {
+            MainApp.errorAlert("El receptor no esta conectado: " + receiverId);
+            return;
+        }
+
+        sendMessageToReceiver(text, sender, receiver);
+    }
+
     public class ClientHandler {
 
         private Socket clientSocket;
@@ -227,7 +243,7 @@ public class SocketServer {
         private StringProperty clientName = new SimpleStringProperty(this, "clientName", "<Sin nombre>");
         private MessageBrokerService messageBrokerService;
 
-        public ClientHandler(Socket clientSocket) {
+        private ClientHandler(Socket clientSocket) {
             this.clientSocket = clientSocket;
         }
 
@@ -249,60 +265,48 @@ public class SocketServer {
         }
 
         public void start() {
-            var task = new Task<Void>() {
-                @Override
-                protected Void call() throws Exception {
-                    ClientHandler.this.run();
-                    return null;
-                }
-
-                @Override
-                protected void failed() {
-                    ClientHandler.this.close();
-
-                    var error = getException();
-
-                    if (error instanceof SocketException && clientSocket == null) {
-                        return;
-                    }
-                    if (error instanceof EOFException) {
-                        System.out.println("Conexión cerrada por el cliente.");
-                        return;
-                    }
-
-                    MainApp.errorAlert(error);
-
-                }
-
-                @Override
-                protected void cancelled() {
-                    System.out.println("Cliente cancelado: " + clientSocket.getInetAddress());
-                    ClientHandler.this.close();
-                }
-            };
-
-            new Thread(task, "ClientHandler-" + getClientName()).start();
+            new Thread(this::run, "ClientHandler[" + getClientName() + "]").start();
         }
 
-        private void run() throws IOException, ClassNotFoundException {
-            messageBrokerService = new MessageBrokerService(clientSocket);
+        private void handleError(Throwable error) {
+            close();
 
-            System.out.println("Cliente conectado: " + getClientAddress());
+            if (error instanceof SocketException && clientSocket == null) {
+                return;
+            }
+            if (error instanceof EOFException) {
+                System.out.println("Conexión cerrada por el cliente.");
+                return;
+            }
 
-            messageBrokerService.receiver.setOnMessageReceived(SocketServer.this::notifyMessageReceived);
-            messageBrokerService.receiver.setOnHandshake(handshake -> {
-                var clientId = handshake.id();
-                var clientName = handshake.name();
-                this.clientId = clientId;
-                this.clientName.set(clientName);
-                System.out.println("Handshake recibido: " + clientName + " (" + clientId + ")");
-                SocketServer.this.clientHandlers.put(clientId, this);
-                messageBrokerService.sender.sendHandShake(serverId, serverNameProperty().get());
+            MainApp.errorAlert(error);
+        }
 
-            });
-            messageBrokerService.receiver.setOnRequestClientList(this::sendServerUsers);
-            messageBrokerService.receiver.setOnMessageRequest(this::sendMessageToReceiver);
-            messageBrokerService.receiver.receiveMessages();
+        private void run() {
+            try {
+                messageBrokerService = new MessageBrokerService(clientSocket, getClientId());
+
+                System.out.println("Cliente conectado: " + getClientAddress());
+
+                messageBrokerService.receiver.setOnMessageReceived(SocketServer.this::notifyMessageReceived);
+                messageBrokerService.receiver.setOnHandshake(handshake -> {
+                    var clientId = handshake.id();
+                    var clientName = handshake.name();
+                    this.clientId = clientId;
+                    this.clientName.set(clientName);
+                    System.out.println("Handshake recibido: " + clientName + " (" + clientId + ")");
+                    SocketServer.this.clientHandlers.put(clientId, this);
+                    messageBrokerService.sender.sendHandShake(serverId, serverNameProperty().get());
+
+                });
+                messageBrokerService.receiver.setOnRequestClientList(this::sendServerUsers);
+                messageBrokerService.receiver.setOnMessageRequest(SocketServer.this::sendMessageToReceiver);
+                messageBrokerService.receiver.receiveMessages();
+            } catch (ClassNotFoundException | IOException e) {
+                Platform.runLater(() -> {
+                    handleError(e);
+                });
+            }
         }
 
         protected void sendServerUsers(ObservableMap<UUID, ClientHandler> map) {
@@ -316,44 +320,6 @@ public class SocketServer {
 
         protected void sendServerUsers() {
             sendServerUsers(SocketServer.this.clientHandlers);
-        }
-
-        public void sendMessageToReceiver(ChatMessageRequest message) {
-            sendMessageToReceiver(message.text(), message.senderId(), message.receiverId());
-        }
-
-        public void sendMessageToReceiver(String messageText, ChatUser sender, ChatUser receiver) {
-            var messageModel = new ChatMessageModel(messageText, sender, receiver);
-
-            if (receiver.id().equals(serverId) || sender.id().equals(serverId)) {
-                notifyMessageReceived(messageModel);
-
-                if (receiver.id().equals(serverId)) {
-                    // If the receiver is the server, we don't need to send it back to the server
-                    return;
-                }
-            }
-
-            var client = SocketServer.this.getClientHandler(receiver.id());
-
-            if (client == null) {
-                MainApp.errorAlert("El receptor no está conectado: " + receiver.id());
-                return;
-            }
-
-            client.messageBrokerService.sender.sendMessageToReceiver(messageModel);
-        }
-
-        void sendMessageToReceiver(String text, UUID senderId, UUID receiverId) {
-            var sender = SocketServer.this.getChatUser(senderId);
-            var receiver = SocketServer.this.getChatUser(receiverId);
-
-            if (sender == null || receiver == null) {
-                MainApp.errorAlert("El remitente o el receptor no están conectados: " + senderId + " -> " + receiverId);
-                return;
-            }
-
-            sendMessageToReceiver(text, sender, receiver);
         }
 
         void close() {

@@ -4,14 +4,15 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.util.UUID;
 
 public class MessageBrokerService implements AutoCloseable {
     public final MessageSenderService sender;
     public final MessageReceiverService receiver;
 
 
-    public MessageBrokerService(Socket socket) throws IOException {
-        this.sender = new MessageSenderService(new ObjectOutputStream(socket.getOutputStream()));
+    public MessageBrokerService(Socket socket, UUID userId) throws IOException {
+        this.sender = new MessageSenderService(new ObjectOutputStream(socket.getOutputStream()), userId);
         this.receiver = new MessageReceiverService(new ObjectInputStream(socket.getInputStream()));
     }
 

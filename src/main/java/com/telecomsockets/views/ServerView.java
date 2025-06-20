@@ -8,6 +8,7 @@ import com.telecomsockets.controllers.ServerController;
 import com.telecomsockets.models.AddressModel;
 import com.telecomsockets.sockets.SocketServer;
 import com.telecomsockets.sockets.SocketServer.ServerState;
+
 import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.scene.control.Label;
@@ -24,7 +25,7 @@ public class ServerView extends AppLayoutView {
         this.controller = controller;
         this.server = controller.server;
 
-        this.bindTitle("Servidor", controller.addressModel().name);
+        this.bindTitle("Servidor", server.serverNameProperty());
         this.createView();
     }
 
@@ -43,16 +44,13 @@ public class ServerView extends AppLayoutView {
 
     public void setupFooter() {
         setOnBack(this::onBack);
-        setOnConnect(e -> onConnect());
 
         statusDataProperty().bind(StatusData.fromServer(server.serverStateProperty()));
 
         // Solo mostrar si no está conectado
         disableConnectProperty().bind(server.is(ServerState.LISTENING));
-        showConnectProperty().bind(server.is(ServerState.CONNECTED));
-
+        showConnectProperty().bind(server.is(ServerState.CONNECTED).not());
     }
-
 
     public void onBack(ActionEvent e) {
         if (!server.getIsStopped()) {
@@ -76,6 +74,7 @@ public class ServerView extends AppLayoutView {
         String ip = addressModel.ip.get();
         int port = addressModel.port.get();
         String name = addressModel.name.get();
+        System.out.println(addressModel);
 
         System.out.println(String.format("Iniciando servidor en %s:%d", ip, port));
 
@@ -92,8 +91,9 @@ public class ServerView extends AppLayoutView {
 
     private Region getAddressForm() {
         var form = new AddressForm(controller.addressModel());
-        form.setOnConnect(e -> onConnect());
+        form.setOnConnect(this::onConnect);
         form.formDisabledProperty().bind(server.is(ServerState.LISTENING));
+        setOnConnect(form::submit);
         return form;
     }
 
