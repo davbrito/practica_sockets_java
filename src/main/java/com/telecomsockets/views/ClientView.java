@@ -2,14 +2,15 @@ package com.telecomsockets.views;
 
 import com.telecomsockets.Navigation;
 import com.telecomsockets.components.AddressForm;
+import com.telecomsockets.components.ChatPane;
 import com.telecomsockets.components.StatusLabel.StatusData;
 import com.telecomsockets.controllers.ClientController;
 import com.telecomsockets.models.AddressModel;
 import com.telecomsockets.sockets.SocketClient;
 import com.telecomsockets.sockets.SocketClient.ConnectionState;
-
 import javafx.beans.binding.Bindings;
 import javafx.event.ActionEvent;
+import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.layout.Region;
 
@@ -39,9 +40,25 @@ public class ClientView extends AppLayoutView {
         showConnectProperty().bind(client.is(ConnectionState.CONNECTED).not());
         disableConnectProperty().bind(client.is(ConnectionState.CONNECTING));
 
-        centerProperty().bind(client.is(ConnectionState.CONNECTED)
-                .map(connected -> connected ? new ClientConnectedView(controller) : getAddressForm()));
+        centerProperty().bind(
+                client.is(ConnectionState.CONNECTED).map(connected -> connected ? createChat() : createAddressForm()));
 
+    }
+
+    private Node createChat() {
+        var chat = new ChatPane(client.toChatUser());
+
+        client.setOnMessageReceived(chat);
+        chat.setItems(client.getUsers());
+        chat.setOnSendMessage(() -> {
+            String message = chat.getInputField().getText().trim();
+            if (!message.isEmpty()) {
+                controller.client.sendMessage(message, chat.selectedItemProperty().get().id());
+                chat.getInputField().clear();
+            }
+        });
+
+        return chat;
     }
 
     public void onBack(ActionEvent e) {
@@ -74,7 +91,7 @@ public class ClientView extends AppLayoutView {
         }
     }
 
-    private Region getAddressForm() {
+    private Region createAddressForm() {
         var form = new AddressForm(controller.addressModel());
         form.setOnConnect(this::onConnect);
         form.formDisabledProperty().bind(client.is(ConnectionState.CONNECTING));

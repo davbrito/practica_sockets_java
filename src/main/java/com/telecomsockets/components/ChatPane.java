@@ -1,13 +1,12 @@
-package com.telecomsockets.views;
+package com.telecomsockets.components;
 
-import com.telecomsockets.components.MessageInputBox;
+import java.util.function.Consumer;
 import com.telecomsockets.components.MessageInputBox.SendHandler;
-import com.telecomsockets.components.MessageList;
+import com.telecomsockets.models.ChatDictModel;
 import com.telecomsockets.models.ChatMessageModel;
 import com.telecomsockets.models.ChatUser;
-
+import com.telecomsockets.views.ChatUsersListView;
 import javafx.beans.binding.Bindings;
-import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.ObservableList;
@@ -20,16 +19,20 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
-public class ChatView extends BorderPane {
+public final class ChatPane extends BorderPane implements Consumer<ChatMessageModel> {
     private MessageList messageList;
     private MessageInputBox messageInputBox;
     private ListView<ChatUser> list;
+    private final ChatDictModel messages;
 
-    public ChatView(ChatUser me) {
+    public ChatPane(ChatUser me) {
         super();
+
+        messages = new ChatDictModel(me.id());
 
         leftProperty().set(createLeft());
         centerProperty().bind(createCenter(me));
+        messageList.itemsProperty().bind(messages.messagesAt(selectedItemProperty().map(ChatUser::id)));
     }
 
     public void setItems(ObservableList<ChatUser> items) {
@@ -71,10 +74,6 @@ public class ChatView extends BorderPane {
         return center;
     }
 
-    public ObjectProperty<ObservableList<ChatMessageModel>> messagesProperty() {
-        return messageList.itemsProperty();
-    }
-
     public void setOnSendMessage(SendHandler onSendMessage) {
         messageInputBox.setOnSendMessage(onSendMessage);
     }
@@ -90,6 +89,11 @@ public class ChatView extends BorderPane {
         titleLabel.textProperty().bind(selectedItemProperty().map(ChatUser::name).orElse("..."));
         container.getChildren().add(titleLabel);
         return container;
+    }
+
+    @Override
+    public void accept(ChatMessageModel message) {
+        messages.addMessageToChat(message);
     }
 
 }

@@ -12,8 +12,8 @@ public class MessageBrokerService implements AutoCloseable {
 
 
     public MessageBrokerService(Socket socket, UUID userId) throws IOException {
-        this.sender = new MessageSenderService(new ObjectOutputStream(socket.getOutputStream()), userId);
-        this.receiver = new MessageReceiverService(new ObjectInputStream(socket.getInputStream()));
+        sender = new MessageSenderService(new ObjectOutputStream(socket.getOutputStream()), userId);
+        receiver = new MessageReceiverService(new ObjectInputStream(socket.getInputStream()));
     }
 
     @Override

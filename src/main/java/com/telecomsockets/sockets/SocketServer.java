@@ -9,13 +9,11 @@ import java.net.SocketException;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
-
 import com.telecomsockets.MainApp;
 import com.telecomsockets.models.ChatMessageModel;
 import com.telecomsockets.models.ChatMessageRequest;
 import com.telecomsockets.models.ChatUser;
 import com.telecomsockets.services.MessageBrokerService;
-
 import javafx.application.Platform;
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.ObjectProperty;
@@ -198,8 +196,18 @@ public class SocketServer {
         }
     }
 
-    public void sendMessageToReceiver(ChatMessageRequest message) {
-        sendMessageToReceiver(message.text(), message.receiverId());
+    public void sendMessageToReceiver(ChatMessageRequest message, ChatUser sender) {
+        var receiverId = message.receiverId();
+        var text = message.text();
+
+        var receiver = getChatUser(receiverId);
+
+        if (receiver == null) {
+            MainApp.errorAlert("El receptor no esta conectado: " + receiverId);
+            return;
+        }
+
+        sendMessageToReceiver(text, sender, receiver);
     }
 
     public void sendMessageToReceiver(String messageText, ChatUser sender, ChatUser receiver) {
@@ -224,17 +232,6 @@ public class SocketServer {
         client.messageBrokerService.sender.sendMessageToReceiver(messageModel);
     }
 
-    void sendMessageToReceiver(String text, UUID receiverId) {
-        var sender = toChatUser();
-        var receiver = getChatUser(receiverId);
-
-        if (receiver == null) {
-            MainApp.errorAlert("El receptor no esta conectado: " + receiverId);
-            return;
-        }
-
-        sendMessageToReceiver(text, sender, receiver);
-    }
 
     public class ClientHandler {
 
@@ -288,7 +285,6 @@ public class SocketServer {
 
                 System.out.println("Cliente conectado: " + getClientAddress());
 
-                messageBrokerService.receiver.setOnMessageReceived(SocketServer.this::notifyMessageReceived);
                 messageBrokerService.receiver.setOnHandshake(handshake -> {
                     var clientId = handshake.id();
                     var clientName = handshake.name();
@@ -299,14 +295,20 @@ public class SocketServer {
                     messageBrokerService.sender.sendHandShake(serverId, serverNameProperty().get());
 
                 });
+                messageBrokerService.receiver.setOnMessageReceived(SocketServer.this::notifyMessageReceived);
                 messageBrokerService.receiver.setOnRequestClientList(this::sendServerUsers);
-                messageBrokerService.receiver.setOnMessageRequest(SocketServer.this::sendMessageToReceiver);
+                messageBrokerService.receiver.setOnMessageRequest(this::forwardMessage);
                 messageBrokerService.receiver.receiveMessages();
             } catch (ClassNotFoundException | IOException e) {
                 Platform.runLater(() -> {
                     handleError(e);
                 });
             }
+        }
+
+        void forwardMessage(ChatMessageRequest message) {
+            SocketServer.this.sendMessageToReceiver(message, this.toChatUser());
+
         }
 
         protected void sendServerUsers(ObservableMap<UUID, ClientHandler> map) {

@@ -1,18 +1,25 @@
 package com.telecomsockets.views;
 
+import java.util.List;
+import java.util.UUID;
 import com.telecomsockets.MainApp;
 import com.telecomsockets.Navigation;
 import com.telecomsockets.components.AddressForm;
+import com.telecomsockets.components.ChatPane;
 import com.telecomsockets.components.StatusLabel.StatusData;
 import com.telecomsockets.controllers.ServerController;
 import com.telecomsockets.models.AddressModel;
+import com.telecomsockets.models.ChatUser;
 import com.telecomsockets.sockets.SocketServer;
+import com.telecomsockets.sockets.SocketServer.ClientHandler;
 import com.telecomsockets.sockets.SocketServer.ServerState;
-
 import javafx.beans.value.ObservableValue;
+import javafx.collections.FXCollections;
+import javafx.collections.MapChangeListener;
+import javafx.collections.ObservableMap;
 import javafx.event.ActionEvent;
+import javafx.scene.Node;
 import javafx.scene.control.Label;
-import javafx.scene.layout.Region;
 
 public class ServerView extends AppLayoutView {
 
@@ -34,12 +41,40 @@ public class ServerView extends AppLayoutView {
         centerProperty().bind(getContent());
     }
 
-    private ObservableValue<Region> getContent() {
+    private ObservableValue<Node> getContent() {
         return server.serverStateProperty().map(state -> switch (state) {
-            case STOPPED -> getAddressForm();
-            default -> new ServerConnectedView(controller);
+            case STOPPED -> createAddressForm();
+            default -> createChat();
         });
 
+    }
+
+    private Node createChat() {
+        var chat = new ChatPane(server.toChatUser());
+
+        server.setOnMessageReceived(chat);
+        var observableMap = server.getClientHandlers();
+        var observableList = FXCollections.observableArrayList(mapToList(observableMap));
+        observableMap.addListener((MapChangeListener<UUID, ClientHandler>) change -> {
+            observableList.setAll(mapToList(change.getMap()));
+        });
+
+        chat.setItems(observableList);
+
+        chat.setOnSendMessage(() -> {
+            String message = chat.getInputField().getText().trim();
+            if (!message.isEmpty()) {
+                controller.sendMessage(chat.selectedItemProperty().get(), message);
+                chat.getInputField().clear();
+            }
+        });
+
+        return chat;
+
+    }
+
+    private List<ChatUser> mapToList(ObservableMap<? extends UUID, ? extends ClientHandler> observableMap) {
+        return observableMap.values().stream().map(ClientHandler::toChatUser).toList();
     }
 
     public void setupFooter() {
@@ -89,7 +124,7 @@ public class ServerView extends AppLayoutView {
         }
     }
 
-    private Region getAddressForm() {
+    private Node createAddressForm() {
         var form = new AddressForm(controller.addressModel());
         form.setOnConnect(this::onConnect);
         form.formDisabledProperty().bind(server.is(ServerState.LISTENING));
