@@ -45,6 +45,76 @@ public class SocketServer {
 
     }
 
+
+    private Thread backgroundThread;
+
+    public void start(String name, String ip, int port) {
+        System.out.printf("Iniciando servidor (%s) en %s:%d%n", name, ip, port);
+
+        if (serverSocket != null && !serverSocket.isClosed()) {
+            MainApp.errorAlert("El servidor ya está en ejecución en: " + ip + ":" + port);
+            return;
+        }
+
+        if (backgroundThread != null && backgroundThread.isAlive()) {
+            backgroundThread.interrupt();
+        }
+
+        backgroundThread = new Thread(runServer(ip, port), "SocketServer-BackgroundThread");
+        backgroundThread.start();
+    }
+
+
+    private Runnable runServer(String ip, int port) {
+        return () -> {
+            setServerState(ServerState.LISTENING);
+            try {
+                // Se crea un nuevo ServerSocket y se vincula a la dirección IP y puerto especificados
+                serverSocket = new ServerSocket();
+                serverSocket.bind(new InetSocketAddress(ip, port));
+
+                setServerState(ServerState.CONNECTED);
+
+                // Inicia el servidor y comienza a escuchar conexiones entrantes
+                listen(ip, port);
+
+                setServerState(ServerState.STOPPED);
+                System.out.println("Servidor detenido.");
+            } catch (IOException error) {
+                handleError(error);
+            }
+        };
+
+    }
+
+    /**
+     * Escucha las conexiones entrantes de clientes en la dirección IP y el puerto especificados. Para
+     * cada conexión entrante, se crea un nuevo hilo {@link ClientHandler} para manejar al cliente.
+     *
+     * @param ip La dirección IP en la que se va a escuchar.
+     * @param port El número de puerto en el que se va a escuchar.
+     * @throws IOException Si se produce un error de E/S al escuchar las conexiones.
+     */
+    private void listen(String ip, int port) throws IOException {
+        System.out.printf("Servidor escuchando en %s:%d\n", ip, port);
+
+        Socket clientSocket;
+
+        while ((clientSocket = serverSocket.accept()) != null) {
+            new ClientHandler(clientSocket).start();
+        }
+    }
+
+
+
+    private void handleError(IOException error) {
+        if (error instanceof SocketException && serverSocket == null) {
+            return;
+        }
+        setServerState(ServerState.STOPPED);
+        MainApp.errorAlert(error);
+    }
+
     public ClientHandler getClientHandler(UUID clientId) {
         return clientHandlers.get(clientId);
     }
@@ -73,62 +143,6 @@ public class SocketServer {
         }
 
         return null;
-    }
-
-    private Thread backgroundThread;
-
-    public void start(String name, String ip, int port) {
-        System.out.printf("Iniciando servidor (%s) en %s:%d%n", name, ip, port);
-
-        if (serverSocket != null && !serverSocket.isClosed()) {
-            MainApp.errorAlert("El servidor ya está en ejecución en: " + ip + ":" + port);
-            return;
-        }
-
-        if (backgroundThread != null && backgroundThread.isAlive()) {
-            backgroundThread.interrupt();
-        }
-
-        backgroundThread = new Thread(runServer(ip, port), "SocketServer-BackgroundThread");
-        backgroundThread.start();
-    }
-
-    Runnable runServer(String ip, int port) {
-        return () -> {
-            Platform.runLater(() -> setServerState(ServerState.LISTENING));
-            try {
-                bindServer(ip, port);
-                Platform.runLater(() -> setServerState(ServerState.CONNECTED));
-                listen(ip, port);
-                Platform.runLater(() -> setServerState(ServerState.STOPPED));
-                System.out.println("Servidor detenido.");
-            } catch (IOException error) {
-                Platform.runLater(() -> {
-                    if (error instanceof SocketException && serverSocket == null) {
-                        return;
-                    }
-                    setServerState(ServerState.STOPPED);
-                    MainApp.errorAlert(error);
-                });
-            }
-        };
-
-    }
-
-    private void listen(String ip, int port) throws IOException {
-        System.out.printf("Servidor escuchando en %s:%d\n", ip, port);
-
-        Socket clientSocket;
-
-        while ((clientSocket = serverSocket.accept()) != null) {
-            new ClientHandler(clientSocket).start();
-        }
-    }
-
-    private void bindServer(String ip, int port) throws IOException {
-        var address = new InetSocketAddress(ip, port);
-        serverSocket = new ServerSocket();
-        serverSocket.bind(address);
     }
 
     public void stop() throws Exception {
@@ -161,7 +175,9 @@ public class SocketServer {
     }
 
     private void setServerState(ServerState state) {
-        serverState.set(state);
+        Platform.runLater(() -> {
+            serverState.set(state);
+        });
     }
 
     public ObjectProperty<ServerState> serverStateProperty() {
@@ -244,6 +260,57 @@ public class SocketServer {
             this.clientSocket = clientSocket;
         }
 
+
+        public void start() {
+            new Thread(this::run, "ClientHandler[" + getClientName() + "]").start();
+        }
+
+
+        private void run() {
+            try {
+                messageBrokerService = new MessageBrokerService(clientSocket, getClientId());
+
+                System.out.println("Cliente conectado: " + getClientAddress());
+
+
+                // Se setean los manejadores de eventos para el servicio de mensajería
+                messageBrokerService.receiver.setOnHandshake(handshake -> {
+                    var clientId = handshake.id();
+                    var clientName = handshake.name();
+                    this.clientId = clientId;
+                    this.clientName.set(clientName);
+                    System.out.println("Handshake recibido: " + clientName + " (" + clientId + ")");
+                    SocketServer.this.clientHandlers.put(clientId, this);
+                    messageBrokerService.sender.sendHandShake(serverId, serverNameProperty().get());
+
+                });
+                messageBrokerService.receiver.setOnMessageReceived(SocketServer.this::notifyMessageReceived);
+                messageBrokerService.receiver.setOnRequestClientList(this::sendServerUsers);
+                messageBrokerService.receiver.setOnMessageRequest(this::forwardMessage);
+
+                // Se inicia el servicio de mensajería para recibir mensajes
+                messageBrokerService.receiver.receiveMessages();
+            } catch (ClassNotFoundException | IOException e) {
+                handleError(e);
+            }
+        }
+
+
+
+        private void handleError(Throwable error) {
+            close();
+
+            if (error instanceof SocketException && clientSocket == null) {
+                return;
+            }
+            if (error instanceof EOFException) {
+                System.out.println("Conexión cerrada por el cliente.");
+                return;
+            }
+
+            MainApp.errorAlert(error);
+        }
+
         public ReadOnlyStringProperty clientNameProperty() {
             return clientName;
         }
@@ -261,54 +328,9 @@ public class SocketServer {
             return String.format("%s:%d", address.getHostAddress(), clientSocket.getPort());
         }
 
-        public void start() {
-            new Thread(this::run, "ClientHandler[" + getClientName() + "]").start();
-        }
-
-        private void handleError(Throwable error) {
-            close();
-
-            if (error instanceof SocketException && clientSocket == null) {
-                return;
-            }
-            if (error instanceof EOFException) {
-                System.out.println("Conexión cerrada por el cliente.");
-                return;
-            }
-
-            MainApp.errorAlert(error);
-        }
-
-        private void run() {
-            try {
-                messageBrokerService = new MessageBrokerService(clientSocket, getClientId());
-
-                System.out.println("Cliente conectado: " + getClientAddress());
-
-                messageBrokerService.receiver.setOnHandshake(handshake -> {
-                    var clientId = handshake.id();
-                    var clientName = handshake.name();
-                    this.clientId = clientId;
-                    this.clientName.set(clientName);
-                    System.out.println("Handshake recibido: " + clientName + " (" + clientId + ")");
-                    SocketServer.this.clientHandlers.put(clientId, this);
-                    messageBrokerService.sender.sendHandShake(serverId, serverNameProperty().get());
-
-                });
-                messageBrokerService.receiver.setOnMessageReceived(SocketServer.this::notifyMessageReceived);
-                messageBrokerService.receiver.setOnRequestClientList(this::sendServerUsers);
-                messageBrokerService.receiver.setOnMessageRequest(this::forwardMessage);
-                messageBrokerService.receiver.receiveMessages();
-            } catch (ClassNotFoundException | IOException e) {
-                Platform.runLater(() -> {
-                    handleError(e);
-                });
-            }
-        }
 
         void forwardMessage(ChatMessageRequest message) {
             SocketServer.this.sendMessageToReceiver(message, this.toChatUser());
-
         }
 
         protected void sendServerUsers(ObservableMap<UUID, ClientHandler> map) {
@@ -325,7 +347,9 @@ public class SocketServer {
         }
 
         void close() {
-            SocketServer.this.clientHandlers.remove(this.clientId);
+            Platform.runLater(() -> {
+                SocketServer.this.clientHandlers.remove(this.clientId);
+            });
 
             if (clientSocket == null)
                 return;

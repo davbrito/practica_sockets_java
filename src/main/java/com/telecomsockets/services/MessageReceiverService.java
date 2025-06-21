@@ -6,11 +6,9 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
-
 import com.telecomsockets.models.ChatMessageModel;
 import com.telecomsockets.models.ChatMessageRequest;
 import com.telecomsockets.models.ChatUser;
-
 import javafx.application.Platform;
 
 public class MessageReceiverService {
@@ -46,11 +44,9 @@ public class MessageReceiverService {
                                 case REQUEST_CLIENT_LIST -> notifyRequestClientList();
                                 default -> System.out.println("Received unknown request: " + request);
                             }
-                            ;
                         }
                         default -> System.out.println("Received unknown object: " + object);
-                    }
-                    ;
+                    };
                 });
 
             }

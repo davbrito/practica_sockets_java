@@ -6,13 +6,11 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.util.UUID;
 import java.util.function.Consumer;
-
 import com.telecomsockets.MainApp;
 import com.telecomsockets.models.ChatMessageModel;
 import com.telecomsockets.models.ChatUser;
 import com.telecomsockets.services.MessageBrokerService;
 import com.telecomsockets.util.ConsumerProperty;
-
 import javafx.application.Platform;
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.SimpleObjectProperty;
@@ -34,8 +32,122 @@ public class SocketClient {
     private MessageBrokerService messageBrokerService;
     private Thread backgroundThread;
 
+    public SocketClient() {}
+
+
+    private void connect(String ip, int port) throws Exception {
+        if (clientSocket != null && clientSocket.isConnected()) {
+            MainApp.errorAlert("Ya está conectado al servidor en " + ip + ":" + port);
+            return;
+        }
+
+        clientSocket = new Socket(ip, port);
+
+        if (!clientSocket.isConnected()) {
+            MainApp.errorAlert("No se pudo conectar al servidor en " + ip + ":" + port);
+            return;
+        }
+        messageBrokerService = new MessageBrokerService(clientSocket, clientId);
+
+        messageBrokerService.receiver.setOnMessageReceived(onMessageReceived::accept);
+        messageBrokerService.receiver.setOnUsersListReceived(users::setAll);
+        messageBrokerService.receiver.setOnHandshake(handshake -> {
+            System.out.println("Handshake recibido: " + handshake);
+            serverNameProperty().set(handshake.name());
+        });
+
+        messageBrokerService.sender.sendHandShake(clientId, getClientName());
+
+        setConnectionState(ConnectionState.CONNECTED);
+
+        messageBrokerService.sender.sendRequestClientList();
+        System.out.println("Conectado al servidor en " + ip + ":" + port);
+
+        messageBrokerService.receiver.receiveMessages();
+    }
+
+    public void start(String ip, int port) {
+        if (backgroundThread != null && backgroundThread.isAlive()) {
+            backgroundThread.interrupt();
+        }
+
+        backgroundThread = new Thread(runClient(ip, port), "SocketClient-BackgroundThread");
+        backgroundThread.start();
+    }
+
+    private Runnable runClient(String ip, int port) {
+        return () -> {
+            try {
+                setConnectionState(ConnectionState.CONNECTING);
+                connect(ip, port);
+                setConnectionState(ConnectionState.DISCONNECTED);
+            } catch (final Exception error) {
+                handlerError(error);
+            }
+        };
+    }
+
+
+
+    private void handlerError(Exception error) {
+        setConnectionState(ConnectionState.DISCONNECTED);
+
+        if (error instanceof SocketException && !(error instanceof ConnectException) && clientSocket == null) {
+            return;
+        }
+
+        try {
+            SocketClient.this.close();
+        } catch (Exception e) {
+        }
+
+        if (error instanceof EOFException) {
+            System.out.println("Conexión cerrada por el servidor.");
+
+            return;
+        }
+
+        MainApp.errorAlert(error);
+    }
+
+
+    public void stop() {
+        if (clientSocket == null || !clientSocket.isConnected()) {
+            System.out.println("No hay conexión activa para desconectar.");
+            return;
+        }
+
+        try {
+            setConnectionState(ConnectionState.DISCONNECTING);
+            close();
+            setConnectionState(ConnectionState.DISCONNECTED);
+            System.out.println("Desconectado del servidor.");
+        } catch (Exception e) {
+            if (clientSocket != null && !clientSocket.isClosed()) {
+                setConnectionState(ConnectionState.CONNECTED);
+            } else {
+                setConnectionState(ConnectionState.DISCONNECTED);
+            }
+            MainApp.errorAlert(e);
+        }
+
+    }
+
+
+    static private String getSocketDisplayName(Socket socket) {
+        if (socket == null) {
+            return "null";
+        }
+        var address = socket.getInetAddress();
+        return String.format("%s:%d", address.getHostAddress(), socket.getPort());
+
+    }
+
+
     private void setConnectionState(ConnectionState state) {
-        connectionStateProperty().set(state);
+        Platform.runLater(() -> {
+            connectionStateProperty().set(state);
+        });
     }
 
     public boolean getIsConnected() {
@@ -62,109 +174,8 @@ public class SocketClient {
         return connectionState;
     }
 
-    private void connect(String ip, int port) throws Exception {
-        if (clientSocket != null && clientSocket.isConnected()) {
-            MainApp.errorAlert("Ya está conectado al servidor en " + ip + ":" + port);
-            return;
-        }
-
-        clientSocket = new Socket(ip, port);
-
-        if (!clientSocket.isConnected()) {
-            MainApp.errorAlert("No se pudo conectar al servidor en " + ip + ":" + port);
-            return;
-        }
-        messageBrokerService = new MessageBrokerService(clientSocket, clientId);
-
-        messageBrokerService.receiver.setOnMessageReceived(onMessageReceived::accept);
-        messageBrokerService.receiver.setOnUsersListReceived(users::setAll);
-        messageBrokerService.receiver.setOnHandshake(handshake -> {
-            System.out.println("Handshake recibido: " + handshake);
-            serverNameProperty().set(handshake.name());
-        });
-
-        messageBrokerService.sender.sendHandShake(clientId, getClientName());
-        Platform.runLater(() -> setConnectionState(ConnectionState.CONNECTED));
-        messageBrokerService.sender.sendRequestClientList();
-        System.out.println("Conectado al servidor en " + ip + ":" + port);
-
-        messageBrokerService.receiver.receiveMessages();
-    }
-
-    static private String getSocketDisplayName(Socket socket) {
-        if (socket == null) {
-            return "null";
-        }
-        var address = socket.getInetAddress();
-        return String.format("%s:%d", address.getHostAddress(), socket.getPort());
-
-    }
-
-    public void start(String ip, int port) {
-        if (backgroundThread != null && backgroundThread.isAlive()) {
-            backgroundThread.interrupt();
-        }
-
-        backgroundThread = new Thread(runClient(ip, port), "SocketClient-BackgroundThread");
-        backgroundThread.start();
-    }
-
-    private Runnable runClient(String ip, int port) {
-        return () -> {
-            try {
-                Platform.runLater(() -> setConnectionState(ConnectionState.CONNECTING));
-                connect(ip, port);
-                Platform.runLater(() -> setConnectionState(ConnectionState.DISCONNECTED));
-            } catch (final Exception error) {
-                Platform.runLater(() -> {
-                    setConnectionState(ConnectionState.DISCONNECTED);
-
-                    if (error instanceof SocketException && !(error instanceof ConnectException)
-                            && clientSocket == null) {
-                        return;
-                    }
-
-                    try {
-                        SocketClient.this.close();
-                    } catch (Exception e) {
-                    }
-
-                    if (error instanceof EOFException) {
-                        System.out.println("Conexión cerrada por el servidor.");
-
-                        return;
-                    }
-
-                    MainApp.errorAlert(error);
-                });
-            }
-        };
-    }
-
-    public void stop() {
-        if (clientSocket == null || !clientSocket.isConnected()) {
-            System.out.println("No hay conexión activa para desconectar.");
-            return;
-        }
-
-        try {
-            setConnectionState(ConnectionState.DISCONNECTING);
-            close();
-            setConnectionState(ConnectionState.DISCONNECTED);
-            System.out.println("Desconectado del servidor.");
-        } catch (Exception e) {
-            if (clientSocket != null && !clientSocket.isClosed()) {
-                setConnectionState(ConnectionState.CONNECTED);
-            } else {
-                setConnectionState(ConnectionState.DISCONNECTED);
-            }
-            MainApp.errorAlert(e);
-        }
-
-    }
-
-    private final ConsumerProperty<ChatMessageModel> onMessageReceived = new ConsumerProperty<>(this,
-            "onMessageReceived");
+    private final ConsumerProperty<ChatMessageModel> onMessageReceived =
+            new ConsumerProperty<>(this, "onMessageReceived");
 
     public void setOnMessageReceived(Consumer<ChatMessageModel> callback) {
         onMessageReceived.set(callback);
